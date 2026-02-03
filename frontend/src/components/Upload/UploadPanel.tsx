@@ -3,19 +3,42 @@ import { useModelStore } from '../../stores/useModelStore';
 import { useMarkerStore } from '../../stores/useMarkerStore';
 import { uploadModel } from '../../services/api';
 import { validateModelFile, formatFileSize } from '../../utils/fileValidation';
+import type { UploadedModel } from '../../types/model';
 
 export default function UploadPanel() {
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [skeletonPrompt, setSkeletonPrompt] = useState<UploadedModel | null>(null);
 
-  const { setModel, setError: setGlobalError } = useModelStore();
+  const { setModel, setRiggedModelUrl, setStage, setError: setGlobalError } = useModelStore();
   const { startPlacing } = useMarkerStore();
+
+  const proceedWithMarkers = useCallback(
+    (model: UploadedModel) => {
+      setModel(model);
+      startPlacing();
+      setSkeletonPrompt(null);
+    },
+    [setModel, startPlacing]
+  );
+
+  const proceedWithExistingSkeleton = useCallback(
+    (model: UploadedModel) => {
+      setModel(model);
+      // Use the uploaded model directly as "rigged" since it already has a skeleton
+      setRiggedModelUrl(model.preview_url);
+      setStage('animations');
+      setSkeletonPrompt(null);
+    },
+    [setModel, setRiggedModelUrl, setStage]
+  );
 
   const handleFile = useCallback(
     async (file: File) => {
       setError(null);
+      setSkeletonPrompt(null);
       const validation = validateModelFile(file);
       if (!validation.valid) {
         setError(validation.error!);
@@ -26,7 +49,6 @@ export default function UploadPanel() {
       setUploadProgress(0);
 
       try {
-        // Simulate progress while uploading
         const progressInterval = setInterval(() => {
           setUploadProgress((p) => Math.min(p + 10, 90));
         }, 200);
@@ -35,14 +57,19 @@ export default function UploadPanel() {
         clearInterval(progressInterval);
         setUploadProgress(100);
 
-        setModel({
+        const model: UploadedModel = {
           model_id: result.model_id,
           preview_url: result.preview_url,
           original_format: result.original_format,
           vertex_count: result.vertex_count,
           has_skeleton: result.has_skeleton,
-        });
-        startPlacing();
+        };
+
+        if (result.has_skeleton) {
+          setSkeletonPrompt(model);
+        } else {
+          proceedWithMarkers(model);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed';
         setError(msg);
@@ -51,7 +78,7 @@ export default function UploadPanel() {
         setUploading(false);
       }
     },
-    [setModel, setGlobalError, startPlacing]
+    [setGlobalError, proceedWithMarkers]
   );
 
   const handleDrop = useCallback(
@@ -86,6 +113,33 @@ export default function UploadPanel() {
       <h2 className="text-sm font-semibold text-white uppercase tracking-wider">
         Upload Model
       </h2>
+
+      {/* Skeleton detected dialog */}
+      {skeletonPrompt && (
+        <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4 space-y-3">
+          <p className="text-sm text-sky-300 font-medium">
+            Skeleton detected
+          </p>
+          <p className="text-xs text-gray-300">
+            This model already has a skeleton. You can use it directly for animations
+            or place markers to create a new rig.
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => proceedWithExistingSkeleton(skeletonPrompt)}
+              className="flex-1 py-2 rounded-lg text-sm font-medium bg-sky-500 hover:bg-sky-600 text-white transition-colors"
+            >
+              Use existing skeleton
+            </button>
+            <button
+              onClick={() => proceedWithMarkers(skeletonPrompt)}
+              className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+            >
+              Re-rig with markers
+            </button>
+          </div>
+        </div>
+      )}
 
       <div
         onDrop={handleDrop}

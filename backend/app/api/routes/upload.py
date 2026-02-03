@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from app.config import UPLOADS_DIR, ALLOWED_MODEL_EXTENSIONS, MAX_UPLOAD_SIZE
 from app.models.schemas import UploadResponse
-from app.services.model_service import convert_to_preview
+from app.services.model_service import convert_to_preview, detect_skeleton
 
 router = APIRouter()
 
@@ -41,12 +41,15 @@ async def upload_model(file: UploadFile = File(...)):
     preview_path = model_dir / "preview.glb"
     vertex_count = await convert_to_preview(original_path, preview_path)
 
+    # Detect if the model already has a skeleton
+    has_skeleton = detect_skeleton(original_path)
+
     return UploadResponse(
         model_id=model_id,
         preview_url=f"/api/models/{model_id}/preview.glb",
         original_format=ext.lstrip("."),
         vertex_count=vertex_count,
-        has_skeleton=False,
+        has_skeleton=has_skeleton,
     )
 
 

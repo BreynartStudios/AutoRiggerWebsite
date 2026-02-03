@@ -27,7 +27,7 @@ export const useExportStore = create<ExportState>((set, get) => ({
   downloadUrl: null,
   error: null,
 
-  setFormat: (format) => set({ format }),
+  setFormat: (format) => set({ format, downloadUrl: null, error: null }),
 
   toggleAnimationSelection: (id) => {
     const { selectedAnimationIds } = get();

@@ -1,4 +1,6 @@
+import json
 import logging
+import struct
 from pathlib import Path
 
 from app.services.blender_service import run_blender_script
@@ -38,6 +40,38 @@ async def convert_to_preview(input_path: Path, output_path: Path) -> int:
         shutil.copy2(input_path, output_path)
 
     return estimate_vertex_count(input_path)
+
+
+def detect_skeleton(filepath: Path) -> bool:
+    """Check if a GLB/GLTF file contains a skeleton (skins array)."""
+    ext = filepath.suffix.lower()
+    try:
+        if ext == ".glb":
+            with open(filepath, "rb") as f:
+                # GLB header: magic(4) + version(4) + length(4)
+                magic = f.read(4)
+                if magic != b"glTF":
+                    return False
+                f.read(4)  # version
+                f.read(4)  # total length
+                # First chunk: length(4) + type(4) + data
+                chunk_length = struct.unpack("<I", f.read(4))[0]
+                chunk_type = f.read(4)
+                if chunk_type != b"JSON":
+                    return False
+                json_data = json.loads(f.read(chunk_length).decode("utf-8"))
+                skins = json_data.get("skins", [])
+                return len(skins) > 0
+        elif ext == ".gltf":
+            json_data = json.loads(filepath.read_text())
+            return len(json_data.get("skins", [])) > 0
+        elif ext == ".fbx":
+            # FBX skeleton detection would require Blender; skip for now
+            # Could check file size heuristics or binary parsing
+            return False
+    except Exception as e:
+        logger.debug("Skeleton detection failed for %s: %s", filepath, e)
+    return False
 
 
 def estimate_vertex_count(filepath: Path) -> int:
