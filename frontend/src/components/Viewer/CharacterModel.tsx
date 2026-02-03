@@ -75,7 +75,7 @@ export default function CharacterModel() {
   if (!modelUrl || !gltf) return null;
 
   return (
-    <group ref={groupRef} onClick={handleClick}>
+    <group ref={groupRef} onClick={handleClick} key={modelUrl}>
       <primitive object={gltf.scene} />
     </group>
   );

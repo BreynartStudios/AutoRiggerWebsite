@@ -57,7 +57,7 @@ export const useAnimationStore = create<AnimationState>((set, get) => ({
   removeFromMyAnimations: (id) =>
     set({ myAnimations: get().myAnimations.filter((a) => a.id !== id) }),
 
-  setCurrentAnimation: (anim) => set({ currentAnimation: anim, currentTime: 0 }),
+  setCurrentAnimation: (anim) => set({ currentAnimation: anim, currentTime: 0, isPlaying: !!anim }),
   setIsPlaying: (isPlaying) => set({ isPlaying }),
   togglePlayback: () => set({ isPlaying: !get().isPlaying }),
   setPlaybackSpeed: (playbackSpeed) => set({ playbackSpeed }),

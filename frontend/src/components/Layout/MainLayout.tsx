@@ -10,7 +10,7 @@ export default function MainLayout() {
   const { currentAnimation } = useAnimationStore();
 
   return (
-    <div className="h-screen flex flex-col bg-gray-950 text-gray-100">
+    <div className="h-dvh flex flex-col bg-gray-950 text-gray-100">
       <Header />
       <div className="flex flex-1 overflow-hidden">
         <Sidebar />
