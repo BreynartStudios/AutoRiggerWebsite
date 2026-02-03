@@ -104,7 +104,7 @@ export const useMarkerStore = create<MarkerState>((set, get) => ({
       markers: createInitialMarkers(),
       currentMarkerIndex: 0,
       selectedMarkerId: null,
-      isPlacingMarkers: false,
+      isPlacingMarkers: true,
     }),
 
   getMarkersForApi: () => {
