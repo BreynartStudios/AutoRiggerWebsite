@@ -1,36 +1,14 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV BLENDER_VERSION=4.0.2
 
-# Install system dependencies
+# Install system dependencies + Blender from Ubuntu repos (works on ARM64)
 RUN apt-get update && apt-get install -y \
-    wget \
-    xz-utils \
-    libxi6 \
-    libxxf86vm1 \
-    libxfixes3 \
-    libxrender1 \
-    libgl1-mesa-glx \
-    libglu1-mesa \
+    blender \
     python3 \
     python3-pip \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
-
-# Download and install Blender
-# Adjust URL for your architecture (amd64 or arm64)
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "arm64" ]; then \
-        BLENDER_ARCH="linux-arm64"; \
-    else \
-        BLENDER_ARCH="linux-x64"; \
-    fi && \
-    wget -q https://download.blender.org/release/Blender4.0/blender-${BLENDER_VERSION}-${BLENDER_ARCH}.tar.xz && \
-    tar -xf blender-${BLENDER_VERSION}-${BLENDER_ARCH}.tar.xz && \
-    mv blender-${BLENDER_VERSION}-${BLENDER_ARCH} /opt/blender && \
-    rm blender-${BLENDER_VERSION}-${BLENDER_ARCH}.tar.xz && \
-    ln -s /opt/blender/blender /usr/local/bin/blender
 
 WORKDIR /app
 
