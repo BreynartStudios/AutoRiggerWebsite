@@ -12,7 +12,7 @@ import type {
 } from '../types/api';
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL || '',
   timeout: 300000, // 5 min for long operations
 });
 
@@ -53,7 +53,7 @@ export async function getModelStatus(modelId: string): Promise<StatusResponse> {
 }
 
 export function getFullUrl(path: string): string {
-  const baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const baseURL = import.meta.env.VITE_API_URL || '';
   return `${baseURL}${path}`;
 }
 
