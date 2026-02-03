@@ -13,6 +13,7 @@ Usage:
 import bpy
 import sys
 import argparse
+import traceback
 from pathlib import Path
 
 
@@ -44,24 +45,34 @@ def import_and_retarget_animation(armature, anim_path, anim_name):
     """Import animation and retarget to armature."""
     filepath = Path(anim_path)
 
+    # Remember existing armatures
+    existing = {obj.name for obj in bpy.data.objects if obj.type == "ARMATURE"}
+
     if filepath.suffix.lower() == ".bvh":
         bpy.ops.import_anim.bvh(filepath=str(filepath))
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath), use_anim=True)
 
+    # Find newly imported armature
     source = None
-    for obj in bpy.context.selected_objects:
-        if obj.type == "ARMATURE" and obj != armature:
+    for obj in bpy.data.objects:
+        if obj.type == "ARMATURE" and obj.name not in existing:
             source = obj
             break
 
-    if source and source.animation_data:
+    if source and source.animation_data and source.animation_data.action:
         action = source.animation_data.action.copy()
         action.name = anim_name
+        print(f"[export]   Animation '{anim_name}': {int(action.frame_range[1] - action.frame_range[0])} frames")
 
         bpy.data.objects.remove(source, do_unlink=True)
         return action
 
+    # Clean up source even if no action found
+    if source:
+        bpy.data.objects.remove(source, do_unlink=True)
+
+    print(f"[export]   WARNING: No animation data found for '{anim_name}'")
     return None
 
 
@@ -99,14 +110,18 @@ def export_with_animations(filepath, mesh, armature, actions, fmt):
         except TypeError:
             bpy.ops.export_scene.gltf(**gltf_params)
     elif fmt.lower() == "fbx":
-        bpy.ops.export_scene.fbx(
+        # bake_anim_use_nla_strips may not exist in Blender 3.0.1
+        fbx_params = dict(
             filepath=str(filepath),
             use_selection=True,
             bake_anim=True,
-            bake_anim_use_nla_strips=True,
             bake_anim_use_all_actions=True,
             add_leaf_bones=False,
         )
+        try:
+            bpy.ops.export_scene.fbx(**fbx_params, bake_anim_use_nla_strips=True)
+        except TypeError:
+            bpy.ops.export_scene.fbx(**fbx_params)
 
 
 def main():
@@ -125,24 +140,39 @@ def main():
 
     args = parser.parse_args(argv)
 
-    anim_paths = [p.strip() for p in args.animations.split(",") if p.strip()]
-    anim_names = [n.strip() for n in args.names.split(",") if n.strip()]
+    print(f"[export] Model: {args.model}")
+    print(f"[export] Animations: {args.animations}")
+    print(f"[export] Names: {args.names}")
+    print(f"[export] Format: {args.format}")
+    print(f"[export] Output: {args.output}")
 
-    mesh, armature = import_model(args.model)
+    try:
+        anim_paths = [p.strip() for p in args.animations.split(",") if p.strip()]
+        anim_names = [n.strip() for n in args.names.split(",") if n.strip()]
 
-    actions = []
-    for path, name in zip(anim_paths, anim_names):
-        action = import_and_retarget_animation(armature, path, name)
-        if action:
-            actions.append(action)
+        print("[export] Step 1/3: Importing model...")
+        mesh, armature = import_model(args.model)
+        if not armature:
+            raise ValueError("No armature found in model")
+        if not mesh:
+            raise ValueError("No mesh found in model")
+        print(f"[export]   Armature: '{armature.name}', Mesh: '{mesh.name}'")
 
-    if actions:
+        print(f"[export] Step 2/3: Importing {len(anim_paths)} animations...")
+        actions = []
+        for path, name in zip(anim_paths, anim_names):
+            action = import_and_retarget_animation(armature, path, name)
+            if action:
+                actions.append(action)
+
+        print(f"[export] Step 3/3: Exporting as {args.format.upper()}...")
         export_with_animations(args.output, mesh, armature, actions, args.format)
-        print(f"Exported {len(actions)} animations to: {args.output}")
-    else:
-        # Export without animations
-        export_with_animations(args.output, mesh, armature, [], args.format)
-        print(f"Exported model (no animations) to: {args.output}")
+
+        print(f"[export] SUCCESS: Exported {len(actions)} animations to {args.output}")
+    except Exception as e:
+        print(f"[export] FAILED: {e}")
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

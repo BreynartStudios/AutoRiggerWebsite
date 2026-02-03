@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.config import ANIMATIONS_DIR, PROCESSED_DIR, UPLOADS_DIR
 from app.models.schemas import AnimationInfo, AnimationsResponse, ApplyAnimationRequest, ApplyAnimationResponse
-from app.services.blender_service import run_blender_script
+from app.services.blender_service import run_blender_script, BlenderError
 
 router = APIRouter()
 
@@ -81,18 +81,21 @@ async def apply_animation(request: ApplyAnimationRequest):
     # Output path
     output_path = PROCESSED_DIR / request.model_id / f"animated_{request.animation_id}.glb"
 
-    await run_blender_script(
-        "apply_animation.py",
-        args=[
-            "--model", str(rigged_path),
-            "--animation", str(anim_file),
-            "--output", str(output_path),
-            "--name", request.animation_id,
-        ],
-    )
+    try:
+        await run_blender_script(
+            "apply_animation.py",
+            args=[
+                "--model", str(rigged_path),
+                "--animation", str(anim_file),
+                "--output", str(output_path),
+                "--name", request.animation_id,
+            ],
+        )
+    except BlenderError as e:
+        raise HTTPException(status_code=500, detail=f"Animation retargeting failed: {str(e)[:500]}")
 
     if not output_path.exists():
-        raise HTTPException(status_code=500, detail="Animation application failed")
+        raise HTTPException(status_code=500, detail="Animation application produced no output")
 
     return ApplyAnimationResponse(
         animated_model_url=f"/api/models/{request.model_id}/animated/{request.animation_id}.glb",

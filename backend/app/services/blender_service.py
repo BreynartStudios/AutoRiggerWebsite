@@ -58,8 +58,9 @@ async def run_blender_script(script_name: str, args: list[str]) -> str:
         if process.returncode != 0:
             # Extract the most useful error info
             all_output = stdout_text + "\n" + stderr_text
-            # Find our [auto_rig] lines for context
-            step_lines = [l for l in all_output.splitlines() if "[auto_rig]" in l]
+            # Find our step-log lines for context
+            tags = ["[auto_rig]", "[apply_anim]", "[export]"]
+            step_lines = [l for l in all_output.splitlines() if any(t in l for t in tags)]
             last_steps = "\n".join(step_lines[-5:]) if step_lines else ""
 
             logger.error(

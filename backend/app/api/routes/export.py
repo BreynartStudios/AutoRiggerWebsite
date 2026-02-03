@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 
 from app.config import PROCESSED_DIR, EXPORTS_DIR, ANIMATIONS_DIR
 from app.models.schemas import ExportRequest, ExportResponse
-from app.services.blender_service import run_blender_script
+from app.services.blender_service import run_blender_script, BlenderError
 
 router = APIRouter()
 
@@ -34,21 +34,30 @@ async def export_model(request: ExportRequest):
                 anim_names.append(anim_id)
 
         if anim_paths:
-            await run_blender_script(
-                "export_model.py",
-                args=[
-                    "--model", str(rigged_path),
-                    "--animations", ",".join(anim_paths),
-                    "--names", ",".join(anim_names),
-                    "--format", ext,
-                    "--output", str(output_path),
-                ],
-            )
+            try:
+                await run_blender_script(
+                    "export_model.py",
+                    args=[
+                        "--model", str(rigged_path),
+                        "--animations", ",".join(anim_paths),
+                        "--names", ",".join(anim_names),
+                        "--format", ext,
+                        "--output", str(output_path),
+                    ],
+                )
+            except BlenderError as e:
+                raise HTTPException(status_code=500, detail=f"Export failed: {str(e)[:500]}")
         else:
             # No animation files found, export without animations
-            await export_without_animations(rigged_path, output_path, ext)
+            try:
+                await export_without_animations(rigged_path, output_path, ext)
+            except BlenderError as e:
+                raise HTTPException(status_code=500, detail=f"Export failed: {str(e)[:500]}")
     else:
-        await export_without_animations(rigged_path, output_path, ext)
+        try:
+            await export_without_animations(rigged_path, output_path, ext)
+        except BlenderError as e:
+            raise HTTPException(status_code=500, detail=f"Export failed: {str(e)[:500]}")
 
     if not output_path.exists():
         raise HTTPException(status_code=500, detail="Export failed")
