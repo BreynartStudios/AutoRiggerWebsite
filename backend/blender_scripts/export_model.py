@@ -29,14 +29,52 @@ def import_model(filepath):
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
 
+    # Diagnostic: print all objects
+    print(f"[export]   Objects after import ({len(bpy.data.objects)}):")
+    for obj in bpy.data.objects:
+        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
+        print(f"[export]     - '{obj.name}' type={obj.type}{parent_info}")
+    print(f"[export]   Armature data blocks: {[a.name for a in bpy.data.armatures]}")
+
     armature = None
     mesh = None
 
+    # Method 1: Direct type check
     for obj in bpy.data.objects:
-        if obj.type == "ARMATURE":
+        if obj.type == "ARMATURE" and armature is None:
             armature = obj
-        elif obj.type == "MESH":
+        elif obj.type == "MESH" and mesh is None:
             mesh = obj
+
+    # Method 2: Check for objects with armature data
+    if not armature:
+        for obj in bpy.data.objects:
+            if obj.data and obj.data.__class__.__name__ == "Armature":
+                armature = obj
+                break
+
+    # Method 3: Check mesh parent/modifiers
+    if not armature and mesh:
+        parent = mesh.parent
+        while parent:
+            if parent.type == "ARMATURE":
+                armature = parent
+                break
+            parent = parent.parent
+        if not armature:
+            for mod in mesh.modifiers:
+                if mod.type == "ARMATURE" and mod.object:
+                    armature = mod.object
+                    break
+
+    # Method 4: Create armature object from orphan data
+    if not armature and bpy.data.armatures:
+        arm_data = bpy.data.armatures[0]
+        print(f"[export]   Creating armature from data: '{arm_data.name}' ({len(arm_data.bones)} bones)")
+        armature = bpy.data.objects.new("Armature", arm_data)
+        bpy.context.scene.collection.objects.link(armature)
+        if mesh and not mesh.parent:
+            mesh.parent = armature
 
     return mesh, armature
 

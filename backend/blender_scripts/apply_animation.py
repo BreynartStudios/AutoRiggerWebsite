@@ -103,15 +103,64 @@ def import_rigged_model(filepath):
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
 
+    # Diagnostic: print ALL objects after import
+    print(f"[apply_anim]   Objects after import ({len(bpy.data.objects)}):")
+    for obj in bpy.data.objects:
+        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
+        print(f"[apply_anim]     - '{obj.name}' type={obj.type}{parent_info}")
+        if obj.type == "MESH":
+            for mod in obj.modifiers:
+                mod_info = f", object='{mod.object.name}'" if hasattr(mod, "object") and mod.object else ""
+                print(f"[apply_anim]       modifier: {mod.name} type={mod.type}{mod_info}")
+
+    # Also check armature data blocks
+    print(f"[apply_anim]   Armature data blocks: {[a.name for a in bpy.data.armatures]}")
+
     armature = None
     mesh = None
 
-    # Check all objects (not just selected - GLTF may not select all)
+    # Method 1: Direct type check
     for obj in bpy.data.objects:
         if obj.type == "ARMATURE" and armature is None:
             armature = obj
         elif obj.type == "MESH" and mesh is None:
             mesh = obj
+
+    # Method 2: If no armature found, check if any object has armature data
+    if not armature:
+        for obj in bpy.data.objects:
+            if obj.data and obj.data.__class__.__name__ == "Armature":
+                print(f"[apply_anim]   Found armature via data class: '{obj.name}'")
+                armature = obj
+                break
+
+    # Method 3: Check mesh parent chain and modifiers
+    if not armature and mesh:
+        # Check parent
+        parent = mesh.parent
+        while parent:
+            if parent.type == "ARMATURE":
+                armature = parent
+                print(f"[apply_anim]   Found armature via mesh parent: '{parent.name}'")
+                break
+            parent = parent.parent
+        # Check armature modifier
+        if not armature:
+            for mod in mesh.modifiers:
+                if mod.type == "ARMATURE" and mod.object:
+                    armature = mod.object
+                    print(f"[apply_anim]   Found armature via modifier: '{mod.object.name}'")
+                    break
+
+    # Method 4: If still no armature, try to create one from armature data
+    if not armature and bpy.data.armatures:
+        arm_data = bpy.data.armatures[0]
+        print(f"[apply_anim]   Creating armature object from data: '{arm_data.name}' ({len(arm_data.bones)} bones)")
+        armature = bpy.data.objects.new("Armature", arm_data)
+        bpy.context.scene.collection.objects.link(armature)
+        # Re-parent mesh if needed
+        if mesh and not mesh.parent:
+            mesh.parent = armature
 
     if not armature:
         raise ValueError("No armature found in rigged model")
