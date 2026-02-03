@@ -2,11 +2,9 @@ import Header from './Header';
 import Sidebar from './Sidebar';
 import SceneCanvas from '../Viewer/SceneCanvas';
 import PlaybackControls from '../Animation/PlaybackControls';
-import { useModelStore } from '../../stores/useModelStore';
 import { useAnimationStore } from '../../stores/useAnimationStore';
 
 export default function MainLayout() {
-  const { model } = useModelStore();
   const { currentAnimation } = useAnimationStore();
 
   return (
@@ -16,7 +14,11 @@ export default function MainLayout() {
         <Sidebar />
         <main className="flex-1 flex flex-col relative">
           <SceneCanvas />
-          {model && currentAnimation && <PlaybackControls />}
+          {currentAnimation && (
+            <div className="absolute bottom-0 left-0 right-0 z-10">
+              <PlaybackControls />
+            </div>
+          )}
         </main>
       </div>
     </div>

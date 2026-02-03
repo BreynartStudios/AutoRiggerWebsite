@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAnimationStore } from '../../stores/useAnimationStore';
 import { useModelStore } from '../../stores/useModelStore';
 import { fetchAnimations, applyAnimation } from '../../services/api';
@@ -19,6 +19,8 @@ export default function AnimationLibrary() {
     addToMyAnimations,
   } = useAnimationStore();
   const { model, setAnimatedModelUrl } = useModelStore();
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const [applying, setApplying] = useState(false);
 
   useEffect(() => {
     fetchAnimations()
@@ -34,6 +36,8 @@ export default function AnimationLibrary() {
     if (!anim) return;
 
     setCurrentAnimation(anim);
+    setApplyError(null);
+    setApplying(true);
 
     try {
       const result = await applyAnimation({
@@ -41,8 +45,11 @@ export default function AnimationLibrary() {
         animation_id: animId,
       });
       setAnimatedModelUrl(result.animated_model_url);
-    } catch {
-      // Preview failed, but animation card was still selected
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to apply animation';
+      setApplyError(msg);
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -80,6 +87,18 @@ export default function AnimationLibrary() {
           />
         ))}
       </div>
+
+      {applying && (
+        <div className="text-xs text-sky-400 bg-sky-500/10 rounded-lg px-3 py-2">
+          Applying animation...
+        </div>
+      )}
+
+      {applyError && (
+        <div className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
+          {applyError}
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2 max-h-60 overflow-y-auto pr-1">
         {filteredAnimations.map((anim) => (
