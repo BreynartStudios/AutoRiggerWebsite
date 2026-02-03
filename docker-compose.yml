@@ -20,7 +20,7 @@ services:
       - ./backend/data:/app/data
       - blender-cache:/tmp/blender
     environment:
-      - BLENDER_PATH=/opt/blender/blender
+      - BLENDER_PATH=/usr/bin/blender
       - DATA_DIR=/app/data
       - MAX_UPLOAD_SIZE=52428800
       - CORS_ORIGINS=http://localhost:3000,http://localhost

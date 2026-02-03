@@ -12,7 +12,7 @@ services:
       - ./backend/blender_scripts:/app/blender_scripts
       - ./backend/data:/app/data
     environment:
-      - BLENDER_PATH=/opt/blender/blender
+      - BLENDER_PATH=/usr/bin/blender
       - DATA_DIR=/app/data
       - CORS_ORIGINS=http://localhost:3000
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
