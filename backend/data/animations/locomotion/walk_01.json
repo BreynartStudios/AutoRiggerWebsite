@@ -1,0 +1,11 @@
+{
+  "id": "walk_01",
+  "name": "Walk",
+  "category": "locomotion",
+  "duration_seconds": 1.0,
+  "fps": 30,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["walk", "locomotion", "cycle"],
+  "description": "Standard walk cycle, loops seamlessly"
+}

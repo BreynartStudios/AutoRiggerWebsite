@@ -1,0 +1,11 @@
+{
+  "id": "dance_01",
+  "name": "Dance",
+  "category": "social",
+  "duration_seconds": 3.0,
+  "fps": 30,
+  "loop": true,
+  "root_motion": false,
+  "tags": ["dance", "social"],
+  "description": "Simple dance loop"
+}

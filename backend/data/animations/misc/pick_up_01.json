@@ -1,0 +1,11 @@
+{
+  "id": "pick_up_01",
+  "name": "Pick Up",
+  "category": "misc",
+  "duration_seconds": 1.5,
+  "fps": 30,
+  "loop": false,
+  "root_motion": false,
+  "tags": ["pick", "item", "interact"],
+  "description": "Picking up an item from the ground"
+}

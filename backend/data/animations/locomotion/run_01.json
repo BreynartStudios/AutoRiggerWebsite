@@ -1,0 +1,11 @@
+{
+  "id": "run_01",
+  "name": "Run",
+  "category": "locomotion",
+  "duration_seconds": 0.8,
+  "fps": 30,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["run", "locomotion", "cycle"],
+  "description": "Standard run cycle"
+}
