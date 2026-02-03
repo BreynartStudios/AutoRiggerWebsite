@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.config import UPLOADS_DIR, PROCESSED_DIR
 from app.models.schemas import RigRequest, RigResponse
-from app.services.blender_service import run_blender_script
+from app.services.blender_service import run_blender_script, BlenderError
 
 router = APIRouter()
 
@@ -43,14 +43,17 @@ async def rig_model(request: RigRequest):
 
     # Run Blender
     start_time = time.time()
-    await run_blender_script(
-        "auto_rig.py",
-        args=[
-            "--input", str(input_path),
-            "--markers", str(markers_path),
-            "--output", str(output_path),
-        ],
-    )
+    try:
+        await run_blender_script(
+            "auto_rig.py",
+            args=[
+                "--input", str(input_path),
+                "--markers", str(markers_path),
+                "--output", str(output_path),
+            ],
+        )
+    except BlenderError as e:
+        raise HTTPException(status_code=500, detail=f"Rigging failed: {str(e)}")
     processing_time = int((time.time() - start_time) * 1000)
 
     if not output_path.exists():

@@ -24,6 +24,7 @@ import bpy
 import sys
 import json
 import argparse
+import addon_utils
 from mathutils import Vector
 from pathlib import Path
 
@@ -47,6 +48,16 @@ MARKER_TO_BONE = {
 }
 
 
+def enable_rigify():
+    """Enable the Rigify addon (required for Blender 3.x from apt)."""
+    loaded_default, loaded_state = addon_utils.check("rigify")
+    if not loaded_state:
+        addon_utils.enable("rigify", default_set=True)
+        print("Rigify addon enabled successfully")
+    else:
+        print("Rigify addon already enabled")
+
+
 def clear_scene():
     """Remove all objects from the scene."""
     bpy.ops.object.select_all(action="SELECT")
@@ -66,7 +77,12 @@ def import_model(filepath):
     ext = filepath.suffix.lower()
 
     if ext == ".obj":
-        bpy.ops.wm.obj_import(filepath=str(filepath))
+        # bpy.ops.wm.obj_import was added in Blender 3.4+
+        # Blender 3.0 uses bpy.ops.import_scene.obj
+        if hasattr(bpy.ops.wm, "obj_import"):
+            bpy.ops.wm.obj_import(filepath=str(filepath))
+        else:
+            bpy.ops.import_scene.obj(filepath=str(filepath))
     elif ext == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
     elif ext in (".glb", ".gltf"):
@@ -269,14 +285,22 @@ def export_model(filepath, rig, mesh):
     filepath = Path(filepath)
 
     if filepath.suffix.lower() == ".glb":
-        bpy.ops.export_scene.gltf(
+        # Parameters differ between Blender versions
+        # export_def_bones / export_all_influences were added in later versions
+        gltf_params = dict(
             filepath=str(filepath),
             export_format="GLB",
             use_selection=True,
             export_skins=True,
-            export_all_influences=True,
-            export_def_bones=True,
         )
+        try:
+            bpy.ops.export_scene.gltf(
+                **gltf_params,
+                export_all_influences=True,
+                export_def_bones=True,
+            )
+        except TypeError:
+            bpy.ops.export_scene.gltf(**gltf_params)
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.export_scene.fbx(
             filepath=str(filepath),
@@ -299,6 +323,9 @@ def main():
     parser.add_argument("--output", required=True, help="Output file path")
 
     args = parser.parse_args(argv)
+
+    # Enable Rigify addon (not enabled by default in apt-installed Blender)
+    enable_rigify()
 
     with open(args.markers, "r") as f:
         markers = json.load(f)

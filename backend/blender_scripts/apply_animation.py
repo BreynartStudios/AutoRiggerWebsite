@@ -142,14 +142,17 @@ def export_animated_model(filepath, mesh, armature):
     filepath = Path(filepath)
 
     if filepath.suffix.lower() == ".glb":
-        bpy.ops.export_scene.gltf(
+        gltf_params = dict(
             filepath=str(filepath),
             export_format="GLB",
             use_selection=True,
             export_skins=True,
             export_animations=True,
-            export_all_influences=True,
         )
+        try:
+            bpy.ops.export_scene.gltf(**gltf_params, export_all_influences=True)
+        except TypeError:
+            bpy.ops.export_scene.gltf(**gltf_params)
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.export_scene.fbx(
             filepath=str(filepath),

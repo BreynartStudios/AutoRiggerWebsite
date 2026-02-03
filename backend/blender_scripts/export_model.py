@@ -83,15 +83,21 @@ def export_with_animations(filepath, mesh, armature, actions, fmt):
     filepath = Path(filepath)
 
     if fmt.lower() == "glb":
-        bpy.ops.export_scene.gltf(
+        gltf_params = dict(
             filepath=str(filepath),
             export_format="GLB",
             use_selection=True,
             export_skins=True,
             export_animations=True,
-            export_nla_strips=True,
-            export_all_influences=True,
         )
+        try:
+            bpy.ops.export_scene.gltf(
+                **gltf_params,
+                export_nla_strips=True,
+                export_all_influences=True,
+            )
+        except TypeError:
+            bpy.ops.export_scene.gltf(**gltf_params)
     elif fmt.lower() == "fbx":
         bpy.ops.export_scene.fbx(
             filepath=str(filepath),

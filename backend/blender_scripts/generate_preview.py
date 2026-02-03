@@ -23,7 +23,10 @@ def import_model(filepath):
     ext = filepath.suffix.lower()
 
     if ext == ".obj":
-        bpy.ops.wm.obj_import(filepath=str(filepath))
+        if hasattr(bpy.ops.wm, "obj_import"):
+            bpy.ops.wm.obj_import(filepath=str(filepath))
+        else:
+            bpy.ops.import_scene.obj(filepath=str(filepath))
     elif ext == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
     elif ext in (".glb", ".gltf"):
@@ -34,13 +37,22 @@ def import_model(filepath):
 
 def export_glb(filepath):
     bpy.ops.object.select_all(action="SELECT")
-    bpy.ops.export_scene.gltf(
-        filepath=str(filepath),
-        export_format="GLB",
-        use_selection=True,
-        export_skins=True,
-        export_materials="EXPORT",
-    )
+    try:
+        bpy.ops.export_scene.gltf(
+            filepath=str(filepath),
+            export_format="GLB",
+            use_selection=True,
+            export_skins=True,
+            export_materials="EXPORT",
+        )
+    except TypeError:
+        # Older Blender versions may not support export_materials param
+        bpy.ops.export_scene.gltf(
+            filepath=str(filepath),
+            export_format="GLB",
+            use_selection=True,
+            export_skins=True,
+        )
 
 
 def main():
