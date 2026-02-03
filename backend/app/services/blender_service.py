@@ -56,12 +56,19 @@ async def run_blender_script(script_name: str, args: list[str]) -> str:
         stderr_text = stderr.decode("utf-8", errors="replace")
 
         if process.returncode != 0:
+            # Extract the most useful error info
+            all_output = stdout_text + "\n" + stderr_text
+            # Find our [auto_rig] lines for context
+            step_lines = [l for l in all_output.splitlines() if "[auto_rig]" in l]
+            last_steps = "\n".join(step_lines[-5:]) if step_lines else ""
+
             logger.error(
-                "Blender script failed (exit %d):\nstdout: %s\nstderr: %s",
-                process.returncode, stdout_text, stderr_text,
+                "Blender script failed (exit %d):\n--- STEPS ---\n%s\n--- STDERR (last 1000) ---\n%s",
+                process.returncode, last_steps, stderr_text[-1000:],
             )
             raise BlenderError(
-                f"Blender exited with code {process.returncode}: {stderr_text[:500]}"
+                f"Blender exited with code {process.returncode}. "
+                f"Steps: {last_steps[-300:]}"
             )
 
         logger.info("Blender script completed successfully")

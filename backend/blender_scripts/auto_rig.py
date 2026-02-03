@@ -325,23 +325,47 @@ def main():
     args = parser.parse_args(argv)
 
     # Enable Rigify addon (not enabled by default in apt-installed Blender)
-    enable_rigify()
+    print(f"[auto_rig] Input: {args.input}")
+    print(f"[auto_rig] Markers: {args.markers}")
+    print(f"[auto_rig] Output: {args.output}")
 
-    with open(args.markers, "r") as f:
-        markers = json.load(f)
+    try:
+        print("[auto_rig] Step 1/8: Enabling Rigify...")
+        enable_rigify()
 
-    validate_markers(markers)
+        print("[auto_rig] Step 2/8: Loading markers...")
+        with open(args.markers, "r") as f:
+            markers = json.load(f)
+        validate_markers(markers)
+        print(f"[auto_rig] Markers loaded: {list(markers.keys())}")
 
-    clear_scene()
-    mesh = import_model(args.input)
-    metarig = create_metarig()
-    fit_metarig_to_markers(metarig, markers)
-    rig = generate_rig(metarig)
-    bind_mesh_to_rig(mesh, rig)
-    cleanup_for_export(rig, mesh)
-    export_model(args.output, rig, mesh)
+        print("[auto_rig] Step 3/8: Clearing scene...")
+        clear_scene()
 
-    print(f"Successfully exported rigged model to: {args.output}")
+        print("[auto_rig] Step 4/8: Importing model...")
+        mesh = import_model(args.input)
+        print(f"[auto_rig] Model imported: {mesh.name}, verts={len(mesh.data.vertices)}")
+
+        print("[auto_rig] Step 5/8: Creating metarig...")
+        metarig = create_metarig()
+
+        print("[auto_rig] Step 6/8: Fitting metarig to markers...")
+        fit_metarig_to_markers(metarig, markers)
+
+        print("[auto_rig] Step 7/8: Generating Rigify rig...")
+        rig = generate_rig(metarig)
+
+        print("[auto_rig] Step 8/8: Binding mesh and exporting...")
+        bind_mesh_to_rig(mesh, rig)
+        cleanup_for_export(rig, mesh)
+        export_model(args.output, rig, mesh)
+
+        print(f"[auto_rig] SUCCESS: Exported to {args.output}")
+    except Exception as e:
+        import traceback
+        print(f"[auto_rig] FAILED at: {e}")
+        traceback.print_exc()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
