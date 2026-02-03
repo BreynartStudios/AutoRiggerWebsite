@@ -57,7 +57,13 @@ BVH_TO_RIGIFY = {
 def build_bone_mapping(source_armature, target_armature):
     """
     Build bone mapping from source to target, auto-detecting naming convention.
-    Tries DEF- prefixed names, plain names, and ORG- names.
+
+    Supports targets with any naming convention:
+    - Rigify DEF-: DEF-spine, DEF-upper_arm.L, etc.
+    - Rigify plain: spine, upper_arm.L, etc.
+    - Rigify ORG-: ORG-spine, ORG-upper_arm.L, etc.
+    - Mixamo: mixamorig:Hips, mixamorig:LeftArm, etc.
+    - Standard/BVH: Hips, LeftArm, LeftUpLeg, etc.
     """
     mapping = {}
     source_bones = [b.name for b in source_armature.pose.bones]
@@ -66,25 +72,35 @@ def build_bone_mapping(source_armature, target_armature):
     print(f"[apply_anim]   Source bones ({len(source_bones)}): {source_bones[:30]}")
     print(f"[apply_anim]   Target bones ({len(target_bones)}): {sorted(list(target_bones))[:30]}")
 
-    # Check if this is a Mixamo rig (bones prefixed with "mixamorig:")
-    is_mixamo = any(b.startswith("mixamorig:") for b in source_bones)
-    if is_mixamo:
-        print("[apply_anim]   Detected Mixamo naming convention")
+    # Detect naming conventions
+    is_mixamo_source = any(b.startswith("mixamorig:") for b in source_bones)
+    is_mixamo_target = any(b.startswith("mixamorig:") for b in target_bones)
+    is_def_target = any(b.startswith("DEF-") for b in target_bones)
+
+    if is_mixamo_source:
+        print("[apply_anim]   Source: Mixamo naming")
+    if is_mixamo_target:
+        print("[apply_anim]   Target: Mixamo naming")
+    if is_def_target:
+        print("[apply_anim]   Target: Rigify DEF- naming")
 
     for bone_name in source_bones:
-        # Get the clean name for BVH lookup
-        clean_name = bone_name.replace("mixamorig:", "") if is_mixamo else bone_name
+        # Get the clean name (strip mixamorig: prefix if present)
+        clean_name = bone_name.replace("mixamorig:", "") if is_mixamo_source else bone_name
 
+        # Build list of candidate target names, ordered by likelihood
+        candidates = []
+
+        # 1. Via BVH_TO_RIGIFY mapping (standard BVH -> Rigify DEF-)
         rigify_name = BVH_TO_RIGIFY.get(clean_name)
-        if not rigify_name:
-            continue
+        if rigify_name:
+            candidates.append(rigify_name)                           # DEF-spine
+            candidates.append(rigify_name.replace("DEF-", ""))       # spine
+            candidates.append(rigify_name.replace("DEF-", "ORG-"))   # ORG-spine
 
-        # Try multiple target name patterns
-        candidates = [
-            rigify_name,                          # DEF-spine
-            rigify_name.replace("DEF-", ""),       # spine
-            rigify_name.replace("DEF-", "ORG-"),   # ORG-spine
-        ]
+        # 2. Direct match using the standard BVH name
+        candidates.append(clean_name)                                # Hips, LeftArm
+        candidates.append(f"mixamorig:{clean_name}")                 # mixamorig:Hips
 
         for candidate in candidates:
             if candidate in target_bones:
@@ -243,7 +259,18 @@ def retarget_animation(source_armature, target_armature, animation_name):
 
 
 def strip_to_def_bones(rig, mesh):
-    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat)."""
+    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat).
+
+    Only strips if the rig actually has DEF- prefixed bones (i.e., Rigify).
+    Non-Rigify rigs (Mixamo, custom) are left as-is.
+    """
+    bone_names = [b.name for b in rig.data.bones]
+    has_def_bones = any(b.startswith("DEF-") for b in bone_names)
+
+    if not has_def_bones:
+        print(f"[apply_anim]   No DEF- bones found, keeping all {len(bone_names)} bones for export")
+        return
+
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.select_all(action="DESELECT")
     rig.select_set(True)
@@ -272,11 +299,11 @@ def strip_to_def_bones(rig, mesh):
     bpy.ops.object.mode_set(mode="OBJECT")
 
     # Clean vertex groups
-    bone_names = {b.name for b in rig.data.bones}
+    remaining = {b.name for b in rig.data.bones}
     for vg in list(mesh.vertex_groups):
-        if vg.name not in bone_names:
+        if vg.name not in remaining:
             mesh.vertex_groups.remove(vg)
-    print(f"[apply_anim]   Stripped to {len(bone_names)} DEF bones")
+    print(f"[apply_anim]   Stripped to {len(remaining)} DEF bones")
 
 
 def export_animated_model(filepath, mesh, armature):

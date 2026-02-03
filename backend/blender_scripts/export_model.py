@@ -11,10 +11,40 @@ Usage:
 """
 
 import bpy
+import re
 import sys
 import argparse
 import traceback
 from pathlib import Path
+
+
+# Same mapping as apply_animation.py
+BVH_TO_RIGIFY = {
+    "Hips": "DEF-spine",
+    "LowerBack": "DEF-spine",
+    "Spine": "DEF-spine.001",
+    "Spine1": "DEF-spine.002",
+    "Spine2": "DEF-spine.003",
+    "Neck": "DEF-spine.004",
+    "Neck1": "DEF-spine.005",
+    "Head": "DEF-spine.006",
+    "LeftShoulder": "DEF-shoulder.L",
+    "LeftArm": "DEF-upper_arm.L",
+    "LeftForeArm": "DEF-forearm.L",
+    "LeftHand": "DEF-hand.L",
+    "RightShoulder": "DEF-shoulder.R",
+    "RightArm": "DEF-upper_arm.R",
+    "RightForeArm": "DEF-forearm.R",
+    "RightHand": "DEF-hand.R",
+    "LeftUpLeg": "DEF-thigh.L",
+    "LeftLeg": "DEF-shin.L",
+    "LeftFoot": "DEF-foot.L",
+    "LeftToeBase": "DEF-toe.L",
+    "RightUpLeg": "DEF-thigh.R",
+    "RightLeg": "DEF-shin.R",
+    "RightFoot": "DEF-foot.R",
+    "RightToeBase": "DEF-toe.R",
+}
 
 
 def load_model(filepath):
@@ -56,8 +86,65 @@ def load_model(filepath):
     return mesh, armature
 
 
+def build_bone_name_map(source_bones, target_bones):
+    """Build a mapping from source bone names to target bone names.
+
+    Same logic as apply_animation.py's build_bone_mapping but works on
+    bone name lists instead of armature objects.
+    """
+    name_map = {}
+    target_set = set(target_bones)
+
+    is_mixamo_source = any(b.startswith("mixamorig:") for b in source_bones)
+    is_mixamo_target = any(b.startswith("mixamorig:") for b in target_set)
+
+    for bone_name in source_bones:
+        clean = bone_name.replace("mixamorig:", "") if is_mixamo_source else bone_name
+
+        candidates = []
+        rigify_name = BVH_TO_RIGIFY.get(clean)
+        if rigify_name:
+            candidates.append(rigify_name)
+            candidates.append(rigify_name.replace("DEF-", ""))
+            candidates.append(rigify_name.replace("DEF-", "ORG-"))
+        candidates.append(clean)
+        candidates.append(f"mixamorig:{clean}")
+
+        for c in candidates:
+            if c in target_set:
+                name_map[bone_name] = c
+                break
+
+    return name_map
+
+
+def remap_action_bones(action, bone_name_map):
+    """Remap bone names in an action's f-curves to match target armature.
+
+    F-curve data_paths look like: pose.bones["Hips"].rotation_euler
+    We need to replace "Hips" with the target bone name.
+    """
+    pattern = re.compile(r'pose\.bones\["([^"]+)"\]')
+    remapped = 0
+
+    for fcurve in action.fcurves:
+        match = pattern.match(fcurve.data_path)
+        if not match:
+            continue
+        src_name = match.group(1)
+        tgt_name = bone_name_map.get(src_name)
+        if tgt_name and tgt_name != src_name:
+            fcurve.data_path = fcurve.data_path.replace(
+                f'pose.bones["{src_name}"]',
+                f'pose.bones["{tgt_name}"]',
+            )
+            remapped += 1
+
+    return remapped
+
+
 def import_and_retarget_animation(armature, anim_path, anim_name):
-    """Import animation and retarget to armature."""
+    """Import animation, remap bone names to target armature, return action."""
     filepath = Path(anim_path)
 
     # Remember existing armatures
@@ -78,7 +165,14 @@ def import_and_retarget_animation(armature, anim_path, anim_name):
     if source and source.animation_data and source.animation_data.action:
         action = source.animation_data.action.copy()
         action.name = anim_name
-        print(f"[export]   Animation '{anim_name}': {int(action.frame_range[1] - action.frame_range[0])} frames")
+
+        # Remap bone names in f-curves to match target armature
+        src_bones = [b.name for b in source.data.bones]
+        tgt_bones = [b.name for b in armature.data.bones]
+        bone_map = build_bone_name_map(src_bones, tgt_bones)
+        remapped = remap_action_bones(action, bone_map)
+        frames = int(action.frame_range[1] - action.frame_range[0])
+        print(f"[export]   Animation '{anim_name}': {frames} frames, {remapped} f-curves remapped")
 
         bpy.data.objects.remove(source, do_unlink=True)
         return action
@@ -92,7 +186,18 @@ def import_and_retarget_animation(armature, anim_path, anim_name):
 
 
 def strip_to_def_bones(rig, mesh):
-    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat)."""
+    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat).
+
+    Only strips if the rig actually has DEF- prefixed bones (i.e., Rigify).
+    Non-Rigify rigs (Mixamo, custom) are left as-is.
+    """
+    bone_names = [b.name for b in rig.data.bones]
+    has_def_bones = any(b.startswith("DEF-") for b in bone_names)
+
+    if not has_def_bones:
+        print(f"[export]   No DEF- bones found, keeping all {len(bone_names)} bones for export")
+        return
+
     bpy.context.view_layer.objects.active = rig
     bpy.ops.object.select_all(action="DESELECT")
     rig.select_set(True)
@@ -121,11 +226,11 @@ def strip_to_def_bones(rig, mesh):
     bpy.ops.object.mode_set(mode="OBJECT")
 
     # Clean vertex groups
-    bone_names = {b.name for b in rig.data.bones}
+    remaining = {b.name for b in rig.data.bones}
     for vg in list(mesh.vertex_groups):
-        if vg.name not in bone_names:
+        if vg.name not in remaining:
             mesh.vertex_groups.remove(vg)
-    print(f"[export]   Stripped to {len(bone_names)} DEF bones")
+    print(f"[export]   Stripped to {len(remaining)} DEF bones")
 
 
 def export_with_animations(filepath, mesh, armature, actions, fmt):
