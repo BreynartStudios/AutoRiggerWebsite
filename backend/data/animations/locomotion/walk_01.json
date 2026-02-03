@@ -3,9 +3,9 @@
   "name": "Walk",
   "category": "locomotion",
   "duration_seconds": 1.0,
-  "fps": 30,
+  "fps": 120,
   "loop": true,
   "root_motion": true,
   "tags": ["walk", "locomotion", "cycle"],
-  "description": "Standard walk cycle, loops seamlessly"
+  "description": "Standard walk cycle, loops seamlessly (CMU 02_01)"
 }

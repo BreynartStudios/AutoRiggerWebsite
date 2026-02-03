@@ -1,0 +1,11 @@
+{
+  "id": "crouch_walk_01",
+  "name": "Crouch Walk",
+  "category": "locomotion",
+  "duration_seconds": 3.0,
+  "fps": 120,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["crouch", "walk", "stealth"],
+  "description": "Crouching walk (CMU 86_10)"
+}

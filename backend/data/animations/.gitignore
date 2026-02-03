@@ -1,0 +1,4 @@
+# BVH animation files are downloaded via scripts/download_animations.sh
+# They're too large for git and come from external sources (CMU MoCap)
+*.bvh
+*.fbx

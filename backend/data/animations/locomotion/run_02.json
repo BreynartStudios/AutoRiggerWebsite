@@ -1,0 +1,11 @@
+{
+  "id": "run_02",
+  "name": "Run 2",
+  "category": "locomotion",
+  "duration_seconds": 2.0,
+  "fps": 120,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["run", "locomotion"],
+  "description": "Run variation (CMU 09_02)"
+}

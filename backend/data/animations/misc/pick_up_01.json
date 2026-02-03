@@ -3,9 +3,9 @@
   "name": "Pick Up",
   "category": "misc",
   "duration_seconds": 1.5,
-  "fps": 30,
+  "fps": 120,
   "loop": false,
   "root_motion": false,
   "tags": ["pick", "item", "interact"],
-  "description": "Picking up an item from the ground"
+  "description": "Picking up an item from the ground (CMU 113_01)"
 }

@@ -3,9 +3,9 @@
   "name": "Dance",
   "category": "social",
   "duration_seconds": 3.0,
-  "fps": 30,
+  "fps": 120,
   "loop": true,
   "root_motion": false,
   "tags": ["dance", "social"],
-  "description": "Simple dance loop"
+  "description": "Simple dance loop (CMU 05_01)"
 }

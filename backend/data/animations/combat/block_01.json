@@ -1,0 +1,11 @@
+{
+  "id": "block_01",
+  "name": "Block",
+  "category": "combat",
+  "duration_seconds": 1.0,
+  "fps": 120,
+  "loop": false,
+  "root_motion": false,
+  "tags": ["block", "defend"],
+  "description": "Blocking pose (CMU 14_06)"
+}

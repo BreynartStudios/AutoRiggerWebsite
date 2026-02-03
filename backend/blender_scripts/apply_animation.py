@@ -15,30 +15,68 @@ from pathlib import Path
 
 
 # Bone mapping from BVH standard to Rigify deform bones
+# Supports: CMU MoCap BVH, MotionBuilder standard, Mixamo FBX
 BVH_TO_RIGIFY = {
+    # Spine chain
     "Hips": "DEF-spine",
+    "LowerBack": "DEF-spine",        # CMU alternate name for Hips
     "Spine": "DEF-spine.001",
     "Spine1": "DEF-spine.002",
     "Spine2": "DEF-spine.003",
     "Neck": "DEF-spine.004",
+    "Neck1": "DEF-spine.005",        # CMU has extra neck joint
     "Head": "DEF-spine.006",
+
+    # Left arm
     "LeftShoulder": "DEF-shoulder.L",
     "LeftArm": "DEF-upper_arm.L",
     "LeftForeArm": "DEF-forearm.L",
     "LeftHand": "DEF-hand.L",
+
+    # Right arm
     "RightShoulder": "DEF-shoulder.R",
     "RightArm": "DEF-upper_arm.R",
     "RightForeArm": "DEF-forearm.R",
     "RightHand": "DEF-hand.R",
+
+    # Left leg
     "LeftUpLeg": "DEF-thigh.L",
     "LeftLeg": "DEF-shin.L",
     "LeftFoot": "DEF-foot.L",
     "LeftToeBase": "DEF-toe.L",
+
+    # Right leg
     "RightUpLeg": "DEF-thigh.R",
     "RightLeg": "DEF-shin.R",
     "RightFoot": "DEF-foot.R",
     "RightToeBase": "DEF-toe.R",
 }
+
+
+def build_bone_mapping(source_armature):
+    """
+    Build bone mapping from source to Rigify, auto-detecting naming convention.
+    Supports standard BVH, CMU MoCap, and Mixamo (mixamorig:) naming.
+    """
+    mapping = {}
+    source_bones = [b.name for b in source_armature.pose.bones]
+
+    # Check if this is a Mixamo rig (bones prefixed with "mixamorig:")
+    is_mixamo = any(b.startswith("mixamorig:") for b in source_bones)
+
+    if is_mixamo:
+        # Map Mixamo names: strip prefix and use standard mapping
+        for bone_name in source_bones:
+            clean_name = bone_name.replace("mixamorig:", "")
+            if clean_name in BVH_TO_RIGIFY:
+                mapping[bone_name] = BVH_TO_RIGIFY[clean_name]
+    else:
+        # Standard BVH / CMU MoCap naming
+        for bone_name in source_bones:
+            if bone_name in BVH_TO_RIGIFY:
+                mapping[bone_name] = BVH_TO_RIGIFY[bone_name]
+
+    return mapping
 
 
 def import_rigged_model(filepath):
@@ -103,17 +141,24 @@ def retarget_animation(source_armature, target_armature, animation_name):
     frame_start = int(source_action.frame_range[0])
     frame_end = int(source_action.frame_range[1])
 
+    # Build mapping based on source bone naming convention
+    bone_mapping = build_bone_mapping(source_armature)
+    print(f"[retarget] Mapped {len(bone_mapping)} bones")
+
+    # Detect root bone (Hips or mixamorig:Hips)
+    root_bones = {"Hips", "mixamorig:Hips", "LowerBack"}
+
     for frame in range(frame_start, frame_end + 1):
         bpy.context.scene.frame_set(frame)
 
-        for bvh_bone, rigify_bone in BVH_TO_RIGIFY.items():
-            source_bone = source_armature.pose.bones.get(bvh_bone)
+        for src_name, rigify_name in bone_mapping.items():
+            source_bone = source_armature.pose.bones.get(src_name)
             if not source_bone:
                 continue
 
-            target_bone = target_armature.pose.bones.get(rigify_bone)
+            target_bone = target_armature.pose.bones.get(rigify_name)
             if not target_bone:
-                alt_name = rigify_bone.replace("DEF-", "")
+                alt_name = rigify_name.replace("DEF-", "")
                 target_bone = target_armature.pose.bones.get(alt_name)
 
             if not target_bone:
@@ -122,7 +167,8 @@ def retarget_animation(source_armature, target_armature, animation_name):
             target_bone.rotation_quaternion = source_bone.rotation_quaternion
             target_bone.keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
-            if bvh_bone == "Hips":
+            # Copy location for root bone only
+            if src_name in root_bones:
                 target_bone.location = source_bone.location
                 target_bone.keyframe_insert(data_path="location", frame=frame)
 

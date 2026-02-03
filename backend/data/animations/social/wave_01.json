@@ -3,9 +3,9 @@
   "name": "Wave",
   "category": "social",
   "duration_seconds": 1.5,
-  "fps": 30,
+  "fps": 120,
   "loop": false,
   "root_motion": false,
   "tags": ["wave", "greet", "social"],
-  "description": "Waving hello gesture"
+  "description": "Waving hello gesture (CMU 141_15)"
 }

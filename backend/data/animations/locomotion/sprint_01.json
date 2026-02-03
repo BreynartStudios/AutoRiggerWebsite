@@ -1,0 +1,11 @@
+{
+  "id": "sprint_01",
+  "name": "Sprint",
+  "category": "locomotion",
+  "duration_seconds": 1.5,
+  "fps": 120,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["sprint", "fast", "run"],
+  "description": "Fast sprint (CMU 35_17)"
+}

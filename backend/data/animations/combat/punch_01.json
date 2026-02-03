@@ -3,9 +3,9 @@
   "name": "Punch",
   "category": "combat",
   "duration_seconds": 0.8,
-  "fps": 30,
+  "fps": 120,
   "loop": false,
   "root_motion": false,
   "tags": ["punch", "attack", "combat"],
-  "description": "Right hand punch"
+  "description": "Right hand punch (CMU 143_01)"
 }
