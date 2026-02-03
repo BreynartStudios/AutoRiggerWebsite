@@ -276,6 +276,60 @@ def cleanup_for_export(rig, mesh):
             bpy.data.objects.remove(obj, do_unlink=True)
 
 
+def simplify_rig_for_export(rig, mesh):
+    """
+    Strip the Rigify rig down to only DEF- (deformation) bones.
+
+    Blender 3.0.1's GLTF exporter doesn't have the export_def_bones
+    parameter and can't handle the complex Rigify rig (hundreds of
+    control/mechanism bones). It ends up exporting EMPTY nodes instead
+    of a proper armature/skin. This function manually removes all
+    non-deformation bones so the GLTF exporter can produce a valid GLB.
+    """
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+
+    # Step 1: Remove constraints on DEF- bones (they reference control bones
+    # that we're about to delete)
+    bpy.ops.object.mode_set(mode="POSE")
+    for pbone in rig.pose.bones:
+        if pbone.name.startswith("DEF-"):
+            for c in list(pbone.constraints):
+                pbone.constraints.remove(c)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Step 2: In edit mode, re-parent DEF bones to nearest DEF ancestor,
+    # then delete all non-DEF bones
+    bpy.ops.object.mode_set(mode="EDIT")
+    edit_bones = rig.data.edit_bones
+
+    # Re-parent: walk up each DEF bone's parent chain to find nearest DEF parent
+    for bone in edit_bones:
+        if not bone.name.startswith("DEF-"):
+            continue
+        parent = bone.parent
+        while parent and not parent.name.startswith("DEF-"):
+            parent = parent.parent
+        bone.parent = parent  # None if no DEF ancestor
+
+    # Delete all non-DEF bones
+    non_def = [b for b in edit_bones if not b.name.startswith("DEF-")]
+    for bone in non_def:
+        edit_bones.remove(bone)
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Step 3: Remove vertex groups that no longer have corresponding bones
+    remaining_bones = {b.name for b in rig.data.bones}
+    for vg in list(mesh.vertex_groups):
+        if vg.name not in remaining_bones:
+            mesh.vertex_groups.remove(vg)
+
+    print(f"[auto_rig] Simplified rig: {len(remaining_bones)} DEF bones, "
+          f"{len(mesh.vertex_groups)} vertex groups")
+
+
 def export_model(filepath, rig, mesh):
     """Export rigged model."""
     bpy.ops.object.select_all(action="DESELECT")
@@ -330,34 +384,37 @@ def main():
     print(f"[auto_rig] Output: {args.output}")
 
     try:
-        print("[auto_rig] Step 1/8: Enabling Rigify...")
+        print("[auto_rig] Step 1/9: Enabling Rigify...")
         enable_rigify()
 
-        print("[auto_rig] Step 2/8: Loading markers...")
+        print("[auto_rig] Step 2/9: Loading markers...")
         with open(args.markers, "r") as f:
             markers = json.load(f)
         validate_markers(markers)
         print(f"[auto_rig] Markers loaded: {list(markers.keys())}")
 
-        print("[auto_rig] Step 3/8: Clearing scene...")
+        print("[auto_rig] Step 3/9: Clearing scene...")
         clear_scene()
 
-        print("[auto_rig] Step 4/8: Importing model...")
+        print("[auto_rig] Step 4/9: Importing model...")
         mesh = import_model(args.input)
         print(f"[auto_rig] Model imported: {mesh.name}, verts={len(mesh.data.vertices)}")
 
-        print("[auto_rig] Step 5/8: Creating metarig...")
+        print("[auto_rig] Step 5/9: Creating metarig...")
         metarig = create_metarig()
 
-        print("[auto_rig] Step 6/8: Fitting metarig to markers...")
+        print("[auto_rig] Step 6/9: Fitting metarig to markers...")
         fit_metarig_to_markers(metarig, markers)
 
-        print("[auto_rig] Step 7/8: Generating Rigify rig...")
+        print("[auto_rig] Step 7/9: Generating Rigify rig...")
         rig = generate_rig(metarig)
 
-        print("[auto_rig] Step 8/8: Binding mesh and exporting...")
+        print("[auto_rig] Step 8/9: Binding mesh and cleaning up...")
         bind_mesh_to_rig(mesh, rig)
         cleanup_for_export(rig, mesh)
+
+        print("[auto_rig] Step 9/9: Simplifying rig and exporting...")
+        simplify_rig_for_export(rig, mesh)
         export_model(args.output, rig, mesh)
 
         print(f"[auto_rig] SUCCESS: Exported to {args.output}")
