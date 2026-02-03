@@ -17,64 +17,41 @@ import traceback
 from pathlib import Path
 
 
-def import_model(filepath):
-    """Import model, return (mesh, armature)."""
+def load_model(filepath):
+    """
+    Load rigged model, preferring .blend over .glb/.fbx.
+
+    Blender 3.0.1's GLTF importer cannot reconstruct armatures from GLB.
+    The pipeline saves .blend alongside GLB, so we open that instead.
+    """
     filepath = Path(filepath)
 
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
 
-    if filepath.suffix.lower() in (".glb", ".gltf"):
+    # Prefer .blend file
+    blend_path = filepath.with_suffix(".blend")
+    if blend_path.exists():
+        print(f"[export]   Loading .blend file: {blend_path}")
+        bpy.ops.wm.open_mainfile(filepath=str(blend_path))
+    elif filepath.suffix.lower() in (".glb", ".gltf"):
         bpy.ops.import_scene.gltf(filepath=str(filepath))
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
 
-    # Diagnostic: print all objects
-    print(f"[export]   Objects after import ({len(bpy.data.objects)}):")
-    for obj in bpy.data.objects:
-        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
-        print(f"[export]     - '{obj.name}' type={obj.type}{parent_info}")
-    print(f"[export]   Armature data blocks: {[a.name for a in bpy.data.armatures]}")
-
     armature = None
     mesh = None
 
-    # Method 1: Direct type check
+    print(f"[export]   Objects in scene ({len(bpy.data.objects)}):")
+    for obj in bpy.data.objects:
+        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
+        print(f"[export]     - '{obj.name}' type={obj.type}{parent_info}")
+
     for obj in bpy.data.objects:
         if obj.type == "ARMATURE" and armature is None:
             armature = obj
         elif obj.type == "MESH" and mesh is None:
             mesh = obj
-
-    # Method 2: Check for objects with armature data
-    if not armature:
-        for obj in bpy.data.objects:
-            if obj.data and obj.data.__class__.__name__ == "Armature":
-                armature = obj
-                break
-
-    # Method 3: Check mesh parent/modifiers
-    if not armature and mesh:
-        parent = mesh.parent
-        while parent:
-            if parent.type == "ARMATURE":
-                armature = parent
-                break
-            parent = parent.parent
-        if not armature:
-            for mod in mesh.modifiers:
-                if mod.type == "ARMATURE" and mod.object:
-                    armature = mod.object
-                    break
-
-    # Method 4: Create armature object from orphan data
-    if not armature and bpy.data.armatures:
-        arm_data = bpy.data.armatures[0]
-        print(f"[export]   Creating armature from data: '{arm_data.name}' ({len(arm_data.bones)} bones)")
-        armature = bpy.data.objects.new("Armature", arm_data)
-        bpy.context.scene.collection.objects.link(armature)
-        if mesh and not mesh.parent:
-            mesh.parent = armature
 
     return mesh, armature
 
@@ -112,6 +89,43 @@ def import_and_retarget_animation(armature, anim_path, anim_name):
 
     print(f"[export]   WARNING: No animation data found for '{anim_name}'")
     return None
+
+
+def strip_to_def_bones(rig, mesh):
+    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat)."""
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+
+    # Remove constraints on DEF bones
+    bpy.ops.object.mode_set(mode="POSE")
+    for pbone in rig.pose.bones:
+        if pbone.name.startswith("DEF-"):
+            for c in list(pbone.constraints):
+                pbone.constraints.remove(c)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Re-parent DEF bones and delete non-DEF
+    bpy.ops.object.mode_set(mode="EDIT")
+    edit_bones = rig.data.edit_bones
+    for bone in edit_bones:
+        if not bone.name.startswith("DEF-"):
+            continue
+        parent = bone.parent
+        while parent and not parent.name.startswith("DEF-"):
+            parent = parent.parent
+        bone.parent = parent
+    non_def = [b for b in edit_bones if not b.name.startswith("DEF-")]
+    for bone in non_def:
+        edit_bones.remove(bone)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Clean vertex groups
+    bone_names = {b.name for b in rig.data.bones}
+    for vg in list(mesh.vertex_groups):
+        if vg.name not in bone_names:
+            mesh.vertex_groups.remove(vg)
+    print(f"[export]   Stripped to {len(bone_names)} DEF bones")
 
 
 def export_with_animations(filepath, mesh, armature, actions, fmt):
@@ -188,8 +202,8 @@ def main():
         anim_paths = [p.strip() for p in args.animations.split(",") if p.strip()]
         anim_names = [n.strip() for n in args.names.split(",") if n.strip()]
 
-        print("[export] Step 1/3: Importing model...")
-        mesh, armature = import_model(args.model)
+        print("[export] Step 1/3: Loading model...")
+        mesh, armature = load_model(args.model)
         if not armature:
             raise ValueError("No armature found in model")
         if not mesh:
@@ -204,6 +218,13 @@ def main():
                 actions.append(action)
 
         print(f"[export] Step 3/3: Exporting as {args.format.upper()}...")
+        # Clean up objects from .blend that aren't needed for export
+        for obj in list(bpy.data.objects):
+            if obj.name.startswith("WGT-"):
+                bpy.data.objects.remove(obj, do_unlink=True)
+        # Strip to DEF bones for GLTF (Blender 3.0.1 can't export full rig as GLB)
+        if args.format.lower() == "glb":
+            strip_to_def_bones(armature, mesh)
         export_with_animations(args.output, mesh, armature, actions, args.format)
 
         print(f"[export] SUCCESS: Exported {len(actions)} animations to {args.output}")

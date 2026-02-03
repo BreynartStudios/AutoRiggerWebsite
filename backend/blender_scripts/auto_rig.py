@@ -413,7 +413,14 @@ def main():
         bind_mesh_to_rig(mesh, rig)
         cleanup_for_export(rig, mesh)
 
-        print("[auto_rig] Step 9/9: Simplifying rig and exporting...")
+        print("[auto_rig] Step 9/9: Saving .blend and exporting GLB preview...")
+        # Save .blend FIRST (preserves full armature data for animation pipeline)
+        # Blender 3.0.1's GLTF exporter cannot handle armatures properly
+        blend_path = str(Path(args.output).with_suffix(".blend"))
+        bpy.ops.wm.save_as_mainfile(filepath=blend_path)
+        print(f"[auto_rig] Saved .blend: {blend_path}")
+
+        # Also export GLB for browser preview (mesh-only is fine for viewer)
         simplify_rig_for_export(rig, mesh)
         export_model(args.output, rig, mesh)
 

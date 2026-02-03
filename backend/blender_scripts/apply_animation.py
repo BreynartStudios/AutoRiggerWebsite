@@ -94,73 +94,40 @@ def build_bone_mapping(source_armature, target_armature):
     return mapping
 
 
-def import_rigged_model(filepath):
-    """Import rigged model and return (mesh, armature)."""
+def load_rigged_model(filepath):
+    """
+    Load rigged model, preferring .blend file over .glb/.fbx.
+
+    Blender 3.0.1's GLTF importer cannot reconstruct armatures from GLB files,
+    so the pipeline saves a .blend alongside the GLB. We open the .blend
+    (which preserves the armature perfectly) and fall back to GLTF/FBX import.
+    """
     filepath = Path(filepath)
 
-    if filepath.suffix.lower() in (".glb", ".gltf"):
+    # Prefer .blend file (saved by auto_rig.py alongside the GLB)
+    blend_path = filepath.with_suffix(".blend")
+    if blend_path.exists():
+        print(f"[apply_anim]   Loading .blend file: {blend_path}")
+        bpy.ops.wm.open_mainfile(filepath=str(blend_path))
+    elif filepath.suffix.lower() in (".glb", ".gltf"):
         bpy.ops.import_scene.gltf(filepath=str(filepath))
     elif filepath.suffix.lower() == ".fbx":
         bpy.ops.import_scene.fbx(filepath=str(filepath))
 
-    # Diagnostic: print ALL objects after import
-    print(f"[apply_anim]   Objects after import ({len(bpy.data.objects)}):")
-    for obj in bpy.data.objects:
-        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
-        print(f"[apply_anim]     - '{obj.name}' type={obj.type}{parent_info}")
-        if obj.type == "MESH":
-            for mod in obj.modifiers:
-                mod_info = f", object='{mod.object.name}'" if hasattr(mod, "object") and mod.object else ""
-                print(f"[apply_anim]       modifier: {mod.name} type={mod.type}{mod_info}")
-
-    # Also check armature data blocks
-    print(f"[apply_anim]   Armature data blocks: {[a.name for a in bpy.data.armatures]}")
-
+    # Find mesh and armature in the scene
     armature = None
     mesh = None
 
-    # Method 1: Direct type check
+    print(f"[apply_anim]   Objects in scene ({len(bpy.data.objects)}):")
+    for obj in bpy.data.objects:
+        parent_info = f", parent='{obj.parent.name}'" if obj.parent else ""
+        print(f"[apply_anim]     - '{obj.name}' type={obj.type}{parent_info}")
+
     for obj in bpy.data.objects:
         if obj.type == "ARMATURE" and armature is None:
             armature = obj
         elif obj.type == "MESH" and mesh is None:
             mesh = obj
-
-    # Method 2: If no armature found, check if any object has armature data
-    if not armature:
-        for obj in bpy.data.objects:
-            if obj.data and obj.data.__class__.__name__ == "Armature":
-                print(f"[apply_anim]   Found armature via data class: '{obj.name}'")
-                armature = obj
-                break
-
-    # Method 3: Check mesh parent chain and modifiers
-    if not armature and mesh:
-        # Check parent
-        parent = mesh.parent
-        while parent:
-            if parent.type == "ARMATURE":
-                armature = parent
-                print(f"[apply_anim]   Found armature via mesh parent: '{parent.name}'")
-                break
-            parent = parent.parent
-        # Check armature modifier
-        if not armature:
-            for mod in mesh.modifiers:
-                if mod.type == "ARMATURE" and mod.object:
-                    armature = mod.object
-                    print(f"[apply_anim]   Found armature via modifier: '{mod.object.name}'")
-                    break
-
-    # Method 4: If still no armature, try to create one from armature data
-    if not armature and bpy.data.armatures:
-        arm_data = bpy.data.armatures[0]
-        print(f"[apply_anim]   Creating armature object from data: '{arm_data.name}' ({len(arm_data.bones)} bones)")
-        armature = bpy.data.objects.new("Armature", arm_data)
-        bpy.context.scene.collection.objects.link(armature)
-        # Re-parent mesh if needed
-        if mesh and not mesh.parent:
-            mesh.parent = armature
 
     if not armature:
         raise ValueError("No armature found in rigged model")
@@ -275,13 +242,59 @@ def retarget_animation(source_armature, target_armature, animation_name):
     return action
 
 
+def strip_to_def_bones(rig, mesh):
+    """Strip rig to DEF-only bones for GLTF export (Blender 3.0.1 compat)."""
+    bpy.context.view_layer.objects.active = rig
+    bpy.ops.object.select_all(action="DESELECT")
+    rig.select_set(True)
+
+    # Remove constraints on DEF bones
+    bpy.ops.object.mode_set(mode="POSE")
+    for pbone in rig.pose.bones:
+        if pbone.name.startswith("DEF-"):
+            for c in list(pbone.constraints):
+                pbone.constraints.remove(c)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Re-parent DEF bones and delete non-DEF
+    bpy.ops.object.mode_set(mode="EDIT")
+    edit_bones = rig.data.edit_bones
+    for bone in edit_bones:
+        if not bone.name.startswith("DEF-"):
+            continue
+        parent = bone.parent
+        while parent and not parent.name.startswith("DEF-"):
+            parent = parent.parent
+        bone.parent = parent
+    non_def = [b for b in edit_bones if not b.name.startswith("DEF-")]
+    for bone in non_def:
+        edit_bones.remove(bone)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Clean vertex groups
+    bone_names = {b.name for b in rig.data.bones}
+    for vg in list(mesh.vertex_groups):
+        if vg.name not in bone_names:
+            mesh.vertex_groups.remove(vg)
+    print(f"[apply_anim]   Stripped to {len(bone_names)} DEF bones")
+
+
 def export_animated_model(filepath, mesh, armature):
-    """Export model with animation."""
+    """Export model with animation, stripping rig for GLB compat."""
+    # Clean up WGT- objects from .blend
+    for obj in list(bpy.data.objects):
+        if obj.name.startswith("WGT-"):
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    filepath = Path(filepath)
+
+    # Strip to DEF bones for GLTF (Blender 3.0.1 can't export full rig)
+    if filepath.suffix.lower() == ".glb":
+        strip_to_def_bones(armature, mesh)
+
     bpy.ops.object.select_all(action="DESELECT")
     mesh.select_set(True)
     armature.select_set(True)
-
-    filepath = Path(filepath)
 
     if filepath.suffix.lower() == ".glb":
         gltf_params = dict(
@@ -325,12 +338,8 @@ def main():
     print(f"[apply_anim] Name: {args.name}")
 
     try:
-        print("[apply_anim] Step 1/5: Clearing scene...")
-        bpy.ops.object.select_all(action="SELECT")
-        bpy.ops.object.delete()
-
-        print("[apply_anim] Step 2/5: Importing rigged model...")
-        mesh, armature = import_rigged_model(args.model)
+        print("[apply_anim] Step 1/5: Loading rigged model...")
+        mesh, armature = load_rigged_model(args.model)
         bone_names = [b.name for b in armature.data.bones]
         print(f"[apply_anim]   Armature: '{armature.name}', {len(bone_names)} bones")
         print(f"[apply_anim]   Mesh: '{mesh.name}'")
