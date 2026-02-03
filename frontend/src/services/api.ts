@@ -30,6 +30,13 @@ export async function rigModel(request: RigRequest): Promise<RigResponse> {
   return data;
 }
 
+export async function useExistingSkeleton(modelId: string): Promise<RigResponse> {
+  const { data } = await api.post<RigResponse>('/api/use-existing-skeleton', {
+    model_id: modelId,
+  });
+  return data;
+}
+
 export async function fetchAnimations(): Promise<AnimationsResponse> {
   const { data } = await api.get<AnimationsResponse>('/api/animations');
   return data;

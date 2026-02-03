@@ -1,7 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useModelStore } from '../../stores/useModelStore';
 import { useMarkerStore } from '../../stores/useMarkerStore';
-import { uploadModel } from '../../services/api';
+import { uploadModel, useExistingSkeleton } from '../../services/api';
 import { validateModelFile, formatFileSize } from '../../utils/fileValidation';
 import type { UploadedModel } from '../../types/model';
 
@@ -11,6 +11,7 @@ export default function UploadPanel() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [skeletonPrompt, setSkeletonPrompt] = useState<UploadedModel | null>(null);
+  const [preparingSkeleton, setPreparingSkeleton] = useState(false);
 
   const { setModel, setRiggedModelUrl, setStage, setError: setGlobalError } = useModelStore();
   const { startPlacing } = useMarkerStore();
@@ -25,14 +26,25 @@ export default function UploadPanel() {
   );
 
   const proceedWithExistingSkeleton = useCallback(
-    (model: UploadedModel) => {
-      setModel(model);
-      // Use the uploaded model directly as "rigged" since it already has a skeleton
-      setRiggedModelUrl(model.preview_url);
-      setStage('animations');
-      setSkeletonPrompt(null);
+    async (model: UploadedModel) => {
+      setPreparingSkeleton(true);
+      setError(null);
+      try {
+        // Call backend to prepare .blend + .glb from the uploaded model
+        const result = await useExistingSkeleton(model.model_id);
+        setModel(model);
+        setRiggedModelUrl(result.rigged_model_url);
+        setStage('animations');
+        setSkeletonPrompt(null);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to prepare skeleton';
+        setError(msg);
+        setGlobalError(msg);
+      } finally {
+        setPreparingSkeleton(false);
+      }
     },
-    [setModel, setRiggedModelUrl, setStage]
+    [setModel, setRiggedModelUrl, setStage, setGlobalError]
   );
 
   const handleFile = useCallback(
@@ -121,19 +133,22 @@ export default function UploadPanel() {
             Skeleton detected
           </p>
           <p className="text-xs text-gray-300">
-            This model already has a skeleton. You can use it directly for animations
-            or place markers to create a new rig.
+            {preparingSkeleton
+              ? 'Preparing skeleton for animations...'
+              : 'This model already has a skeleton. You can use it directly for animations or place markers to create a new rig.'}
           </p>
           <div className="flex gap-2">
             <button
               onClick={() => proceedWithExistingSkeleton(skeletonPrompt)}
-              className="flex-1 py-2 rounded-lg text-sm font-medium bg-sky-500 hover:bg-sky-600 text-white transition-colors"
+              disabled={preparingSkeleton}
+              className="flex-1 py-2 rounded-lg text-sm font-medium bg-sky-500 hover:bg-sky-600 disabled:bg-sky-500/50 disabled:cursor-wait text-white transition-colors"
             >
-              Use existing skeleton
+              {preparingSkeleton ? 'Preparing...' : 'Use existing skeleton'}
             </button>
             <button
               onClick={() => proceedWithMarkers(skeletonPrompt)}
-              className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+              disabled={preparingSkeleton}
+              className="flex-1 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 disabled:bg-gray-700/50 disabled:cursor-not-allowed text-gray-300 transition-colors"
             >
               Re-rig with markers
             </button>

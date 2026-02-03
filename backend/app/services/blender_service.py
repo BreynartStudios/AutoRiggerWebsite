@@ -59,7 +59,7 @@ async def run_blender_script(script_name: str, args: list[str]) -> str:
             # Extract the most useful error info
             all_output = stdout_text + "\n" + stderr_text
             # Find our step-log lines for context
-            tags = ["[auto_rig]", "[apply_anim]", "[export]"]
+            tags = ["[auto_rig]", "[apply_anim]", "[export]", "[prepare_rig]"]
             step_lines = [l for l in all_output.splitlines() if any(t in l for t in tags)]
             last_steps = "\n".join(step_lines[-5:]) if step_lines else ""
 

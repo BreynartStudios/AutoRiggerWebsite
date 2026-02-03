@@ -66,9 +66,15 @@ def detect_skeleton(filepath: Path) -> bool:
             json_data = json.loads(filepath.read_text())
             return len(json_data.get("skins", [])) > 0
         elif ext == ".fbx":
-            # FBX skeleton detection would require Blender; skip for now
-            # Could check file size heuristics or binary parsing
-            return False
+            # FBX binary contains identifiable strings for bone/skeleton data.
+            # Search for common bone-type markers in the binary.
+            data = filepath.read_bytes()
+            bone_markers = [
+                b"LimbNode", b"Skeleton",
+                b"Hips", b"Spine", b"mixamorig:",
+                b"DEF-spine", b"LeftUpLeg", b"RightUpLeg",
+            ]
+            return any(marker in data for marker in bone_markers)
     except Exception as e:
         logger.debug("Skeleton detection failed for %s: %s", filepath, e)
     return False
