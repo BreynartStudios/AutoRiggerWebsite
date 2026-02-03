@@ -90,19 +90,27 @@ def import_model(filepath):
     else:
         raise ValueError(f"Unsupported format: {ext}")
 
-    mesh_objects = [obj for obj in bpy.context.selected_objects if obj.type == "MESH"]
+    # Remove any existing armatures from the import (we create our own with Rigify)
+    for obj in list(bpy.data.objects):
+        if obj.type == "ARMATURE":
+            print(f"[auto_rig] Removing existing armature: '{obj.name}'")
+            bpy.data.objects.remove(obj, do_unlink=True)
+
+    mesh_objects = [obj for obj in bpy.data.objects if obj.type == "MESH"]
 
     if not mesh_objects:
         raise ValueError("No mesh found in imported file")
 
+    # Join multiple meshes into one
     if len(mesh_objects) > 1:
-        bpy.context.view_layer.objects.active = mesh_objects[0]
         bpy.ops.object.select_all(action="DESELECT")
         for obj in mesh_objects:
             obj.select_set(True)
+        bpy.context.view_layer.objects.active = mesh_objects[0]
         bpy.ops.object.join()
 
-    mesh = bpy.context.active_object
+    mesh = mesh_objects[0] if len(mesh_objects) == 1 else bpy.context.active_object
+    bpy.context.view_layer.objects.active = mesh
     bpy.ops.object.origin_set(type="ORIGIN_CENTER_OF_VOLUME")
     mesh.location = (0, 0, 0)
 
