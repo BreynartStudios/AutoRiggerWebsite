@@ -11,10 +11,13 @@ export default function CharacterModel() {
   const groupRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
 
-  const { model, riggedModelUrl, animatedModelUrl } = useModelStore();
-  const { isPlacingMarkers, placeMarker } = useMarkerStore();
-  const { isPlaying, playbackSpeed, loopEnabled, setCurrentTime, setDuration } =
-    useAnimationStore();
+  // Use selectors to avoid re-renders from unrelated store changes
+  const model = useModelStore((s) => s.model);
+  const riggedModelUrl = useModelStore((s) => s.riggedModelUrl);
+  const animatedModelUrl = useModelStore((s) => s.animatedModelUrl);
+  const isPlacingMarkers = useMarkerStore((s) => s.isPlacingMarkers);
+  const placeMarker = useMarkerStore((s) => s.placeMarker);
+  const loopEnabled = useAnimationStore((s) => s.loopEnabled);
 
   const modelUrl = animatedModelUrl || riggedModelUrl || model?.preview_url;
 
@@ -23,38 +26,49 @@ export default function CharacterModel() {
   // Load model
   const gltf = useLoader(GLTFLoader, modelUrl ? getFullUrl(modelUrl) : '/placeholder.glb', undefined, () => {});
 
-  // Set up animations
+  // Set up animation mixer when gltf changes
   useEffect(() => {
-    if (!gltf || !groupRef.current) return;
+    if (!gltf?.animations?.length) {
+      mixerRef.current = null;
+      return;
+    }
 
-    if (gltf.animations.length > 0) {
-      const mixer = new THREE.AnimationMixer(gltf.scene);
-      mixerRef.current = mixer;
+    const mixer = new THREE.AnimationMixer(gltf.scene);
+    mixerRef.current = mixer;
 
-      const action = mixer.clipAction(gltf.animations[0]);
+    const action = mixer.clipAction(gltf.animations[0]);
+    action.play();
+
+    useAnimationStore.getState().setDuration(gltf.animations[0].duration);
+
+    return () => {
+      mixer.stopAllAction();
+      mixerRef.current = null;
+    };
+  }, [gltf]);
+
+  // Update loop setting separately (doesn't recreate mixer)
+  useEffect(() => {
+    if (!mixerRef.current || !gltf?.animations?.length) return;
+    const action = mixerRef.current.existingAction(gltf.animations[0]);
+    if (action) {
       action.setLoop(loopEnabled ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
       action.clampWhenFinished = !loopEnabled;
-
-      if (isPlaying) {
-        action.play();
-      }
-
-      setDuration(gltf.animations[0].duration);
-
-      return () => {
-        mixer.stopAllAction();
-        mixerRef.current = null;
-      };
     }
-  }, [gltf, loopEnabled, isPlaying, setDuration]);
+  }, [gltf, loopEnabled]);
 
-  // Update mixer
+  // Update mixer every frame - reads directly from store to avoid re-render loop
   useFrame((_, delta) => {
-    if (mixerRef.current && isPlaying) {
+    if (!mixerRef.current) return;
+    const { isPlaying, playbackSpeed } = useAnimationStore.getState();
+    if (isPlaying) {
       mixerRef.current.update(delta * playbackSpeed);
-      const action = mixerRef.current.existingAction(gltf.animations[0]);
+    }
+    const clip = gltf?.animations?.[0];
+    if (clip) {
+      const action = mixerRef.current.existingAction(clip);
       if (action) {
-        setCurrentTime(action.time);
+        useAnimationStore.getState().setCurrentTime(action.time);
       }
     }
   });

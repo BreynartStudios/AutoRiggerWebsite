@@ -11,7 +11,7 @@ export default function SceneCanvas() {
   const { model, isProcessing } = useModelStore();
 
   return (
-    <div className="flex-1 relative bg-gray-950">
+    <div className="flex-1 relative bg-gray-950 min-h-0 overflow-hidden">
       {isProcessing && <LoadingOverlay />}
 
       <Canvas
