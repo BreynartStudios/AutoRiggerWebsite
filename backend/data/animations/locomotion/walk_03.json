@@ -1,0 +1,11 @@
+{
+  "id": "walk_03",
+  "name": "Walk Style",
+  "category": "locomotion",
+  "duration_seconds": 2.5,
+  "fps": 120,
+  "loop": true,
+  "root_motion": true,
+  "tags": ["walk", "locomotion", "style"],
+  "description": "Walk style variation (CMU 35_01)"
+}

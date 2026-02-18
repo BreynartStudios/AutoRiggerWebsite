@@ -1,0 +1,11 @@
+{
+  "id": "jump_forward_01",
+  "name": "Jump Forward",
+  "category": "locomotion",
+  "duration_seconds": 2.0,
+  "fps": 120,
+  "loop": false,
+  "root_motion": true,
+  "tags": ["jump", "forward"],
+  "description": "Forward jump (CMU 16_15)"
+}

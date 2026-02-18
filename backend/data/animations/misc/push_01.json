@@ -1,0 +1,11 @@
+{
+  "id": "push_01",
+  "name": "Push",
+  "category": "misc",
+  "duration_seconds": 2.0,
+  "fps": 120,
+  "loop": false,
+  "root_motion": true,
+  "tags": ["push", "interact"],
+  "description": "Pushing motion (CMU 02_03)"
+}

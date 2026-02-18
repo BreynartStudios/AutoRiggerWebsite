@@ -1,0 +1,11 @@
+{
+  "id": "hit_react_01",
+  "name": "Hit React",
+  "category": "combat",
+  "duration_seconds": 1.0,
+  "fps": 120,
+  "loop": false,
+  "root_motion": false,
+  "tags": ["hit", "react", "damage"],
+  "description": "Hit reaction (CMU 14_14)"
+}

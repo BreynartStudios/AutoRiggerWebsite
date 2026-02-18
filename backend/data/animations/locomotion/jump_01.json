@@ -1,0 +1,11 @@
+{
+  "id": "jump_01",
+  "name": "Jump",
+  "category": "locomotion",
+  "duration_seconds": 1.5,
+  "fps": 120,
+  "loop": false,
+  "root_motion": false,
+  "tags": ["jump"],
+  "description": "Jump motion (CMU 16_35)"
+}

@@ -1,0 +1,11 @@
+{
+  "id": "idle_01",
+  "name": "Idle",
+  "category": "locomotion",
+  "duration_seconds": 2.0,
+  "fps": 120,
+  "loop": true,
+  "root_motion": false,
+  "tags": ["idle", "standing"],
+  "description": "Standing idle animation (CMU 141_01)"
+}
